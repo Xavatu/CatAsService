@@ -77,7 +77,7 @@ class AsyncTransportClient(AsyncAbstractClient):
 
     async def write(self, data: bytes):
         await self._write(data)
-        await self._writer.drain()
+        # await self._writer.drain()
 
 
 class AsyncTcpClient(AsyncTransportClient):
@@ -106,12 +106,12 @@ class AsyncUdpClient(AsyncTransportClient):
 if __name__ == "__main__":
 
     async def main():
-        client = AsyncTcpClient("127.0.0.1", "8003")
+        client = AsyncUdpClient("127.0.0.1", "8002")
         await client.open("127.0.0.1", "8000")
         while True:
             await client.write("Hello World!".encode())
+            await asyncio.sleep(1)
             data = await client.read(100)
             print(f"Received: {data.decode()!r}")
-        # await client.close()
 
     asyncio.run(main())
