@@ -88,9 +88,10 @@ class AsyncTransportClient(AsyncAbstractClient):
 
     async def write(self, data: bytes):
         await self._write(data)
+        await self._writer.drain()
 
 
-class TcpTransportClient(AsyncTransportClient):
+class AsyncTcpClient(AsyncTransportClient):
     def __init__(self, host: str, port: str):
         super().__init__(
             host, port, socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -113,7 +114,7 @@ class _Writer:
         self._sock.send(data, **kwargs)
 
 
-class UdpTransportClient(AsyncTransportClient):
+class AsyncUdpClient(AsyncTransportClient):
     def __init__(self, host: str, port: str):
         super().__init__(
             host, port, socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -131,12 +132,12 @@ class UdpTransportClient(AsyncTransportClient):
 
 if __name__ == "__main__":
 
-    async def main():
-        client = UdpTransportClient("127.0.0.1", "8002")
-        await client.open("127.0.0.1", "8889")
+    async def main(*argv):
+        client = AsyncTcpClient("127.0.0.1", "8002")
+        await client.open("127.0.0.1", "8000")
         await client.write("Hello World!".encode())
-        data = await client.read(100)
-        print(f"Received: {data.decode()!r}")
+        # data = await client.read(100)
+        # print(f"Received: {data.decode()!r}")
         await client.close()
 
     asyncio.run(main())
