@@ -1,9 +1,8 @@
 import socket
 import asyncio
 from abc import ABC, abstractmethod
-from functools import wraps
 
-from application.network.client import to_coroutine_function
+from application.network.common import to_coroutine_function
 
 
 class AsyncAbstractServer(ABC):
@@ -21,14 +20,6 @@ class AsyncAbstractServer(ABC):
     @abstractmethod
     async def stop(self):
         ...
-
-    # @abstractmethod
-    # async def read(self, *args, **kwargs):
-    #     ...
-    #
-    # @abstractmethod
-    # async def write(self, *args, **kwargs):
-    #     ...
 
     @abstractmethod
     async def handle_message(self, *args, **kwargs):
@@ -73,45 +64,27 @@ class AsyncTransportConnection(AsyncAbstractConnection):
         await self._writer.wait_closed()
         self._is_opened = False
 
-    def _handle_connection_error(self, func):
-        # check func is coroutine or awaitable
-        if not hasattr(func, "__await__"):
-
-            @wraps(func)
-            async def wrapper(*args, **kwargs):
-                try:
-                    return await func(*args, **kwargs)
-                except ConnectionError:
-                    self._is_opened = False
-                    raise
-
-            return wrapper
-
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            try:
-                return func(*args, **kwargs)
-            except ConnectionError:
-                self._is_opened = False
-                raise
-
-        return wrapper
-
     async def _read(self, n: int):
         func = to_coroutine_function(self._reader.read)
         return await func(n)
 
-    @_handle_connection_error
     async def read(self, n: int) -> bytes:
-        return await self._read(n)
+        try:
+            return await self._read(n)
+        except ConnectionError:
+            self._is_opened = False
+            raise
 
     async def _write(self, data: bytes):
         func = to_coroutine_function(self._writer.write)
         return await func(data)
 
-    @_handle_connection_error
     async def write(self, data: bytes):
-        return await self._write(data)
+        try:
+            return await self._write(data)
+        except ConnectionError:
+            self._is_opened = False
+            raise
 
     @property
     def is_opened(self):
@@ -126,9 +99,7 @@ class AsyncTransportServer(AsyncAbstractServer):
         self._sock.bind((self._host, int(self._port)))
         self._connections: list[AsyncTransportConnection] = []
 
-        loop = asyncio.get_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.create_task(self._monitoring_connections())
+        asyncio.create_task(self._monitoring_connections())
 
     async def _monitoring_connections(self):
         while True:
@@ -136,7 +107,7 @@ class AsyncTransportServer(AsyncAbstractServer):
             for connection in self._connections:
                 if not connection.is_opened:
                     print(f"connection lost {connection}")
-                    del connection
+                    self._connections.remove(connection)
 
     async def start(self):
         self._server = await asyncio.start_server(
@@ -167,18 +138,30 @@ class AsyncTcpServer(AsyncTransportServer):
         )
 
 
+class AsyncUdpServer(AsyncTransportServer):
+    def __init__(self, host: str, port: str):
+        super().__init__(
+            host, port, socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        )
+
+
 if __name__ == "__main__":
-    server = AsyncTcpServer("127.0.0.1", "8000")
 
-    async def start_server():
-        await server.start()
-
-    async def stop_server():
+    async def stop_server(server: AsyncTcpServer):
         while True:
             await asyncio.sleep(1)
+            for connection in server.connections:
+                try:
+                    print(await connection.read(100))
+                    # await connection.close()
+                    print(await connection.write(b"I'm server"))
+                except ConnectionError:
+                    pass
+                print(connection.is_opened)
             print(server.connections)
 
     async def main():
-        await asyncio.gather(start_server(), stop_server())
+        server = AsyncTcpServer("127.0.0.1", "8000")
+        await asyncio.gather(server.start(), stop_server(server))
 
     asyncio.run(main())

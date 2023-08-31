@@ -1,7 +1,8 @@
 import socket
 import asyncio
 from abc import ABC, abstractmethod
-from functools import wraps
+
+from application.network.common import to_coroutine_function, Reader, Writer
 
 
 class AsyncAbstractClient(ABC):
@@ -35,18 +36,6 @@ class AsyncAbstractClient(ABC):
     @abstractmethod
     async def write(self, *args, **kwargs):
         ...
-
-
-def to_coroutine_function(func):
-    if asyncio.iscoroutinefunction(func):
-        return func
-
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        await asyncio.sleep(0)
-        return func(*args, **kwargs)
-
-    return wrapper
 
 
 class AsyncTransportClient(AsyncAbstractClient):
@@ -98,22 +87,6 @@ class AsyncTcpClient(AsyncTransportClient):
         )
 
 
-class _Reader:
-    def __init__(self, sock: socket.socket):
-        self._sock = sock
-
-    def read(self, n: int, **kwargs) -> bytes:
-        return self._sock.recv(n, **kwargs)
-
-
-class _Writer:
-    def __init__(self, sock: socket.socket):
-        self._sock = sock
-
-    def write(self, data: bytes, **kwargs):
-        self._sock.send(data, **kwargs)
-
-
 class AsyncUdpClient(AsyncTransportClient):
     def __init__(self, host: str, port: str):
         super().__init__(
@@ -125,19 +98,20 @@ class AsyncUdpClient(AsyncTransportClient):
     ) -> "AsyncTransportClient":
         await asyncio.sleep(0)
         self._sock.connect((host, int(port)))
-        self._reader = _Reader(self._sock)
-        self._writer = _Writer(self._sock)
+        self._reader = Reader(self._sock)
+        self._writer = Writer(self._sock)
         return self
 
 
 if __name__ == "__main__":
 
-    async def main(*argv):
-        client = AsyncTcpClient("127.0.0.1", "8002")
+    async def main():
+        client = AsyncTcpClient("127.0.0.1", "8003")
         await client.open("127.0.0.1", "8000")
-        await client.write("Hello World!".encode())
-        # data = await client.read(100)
-        # print(f"Received: {data.decode()!r}")
-        await client.close()
+        while True:
+            await client.write("Hello World!".encode())
+            data = await client.read(100)
+            print(f"Received: {data.decode()!r}")
+        # await client.close()
 
     asyncio.run(main())
