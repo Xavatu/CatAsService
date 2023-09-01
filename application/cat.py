@@ -4,6 +4,7 @@ from random import randint
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from application.network.server import AsyncTcpServer, AsyncUdpServer
 from config.logger import logger
 from config.db import async_session_injector
 from utils.cruds import FoodCRUD, UserCRUD, StatCRUD
@@ -11,6 +12,10 @@ from utils.cruds import FoodCRUD, UserCRUD, StatCRUD
 
 CAT_SATIETY_PERIOD = 60
 CAT_TIME_TO_FORGET = 300
+
+host = "127.0.0.1"
+tcp_port = 8000
+udp_port = 8001
 
 
 def get_weights(n: int) -> list[float]:
@@ -256,3 +261,23 @@ class Cat:
         await StatCRUD.add_pet_stat(user.id, False, session=session)
         logger.debug(f"pet unsuccessfully: {scale}")
         return False
+
+
+class CatService:
+    def __init__(self):
+        self._cat = Cat()
+        self._tcp_server = AsyncTcpServer(host, tcp_port)
+        self._udp_server = AsyncUdpServer(host, udp_port)
+
+    async def _start(self):
+        await asyncio.gather(
+            self._tcp_server.start(), self._udp_server.start()
+        )
+
+    async def _stop(self):
+        await asyncio.gather(self._tcp_server.stop(), self._udp_server.stop())
+
+
+if __name__ == "__main__":
+    cat_service = CatService()
+    asyncio.run(cat_service._start())
