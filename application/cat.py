@@ -9,6 +9,7 @@ from application.network.server import (
     AsyncTcpServer,
     AsyncUdpServer,
     AsyncTcpConnection,
+    AsyncUdpConnection,
 )
 from application.utils.cruds import FoodCRUD, UserCRUD, StatCRUD
 from config.logger import logger
@@ -25,6 +26,11 @@ udp_port = 8001
 tcp_response_messages = {
     False: b"Scratched by the Cat",
     True: b"Tolerated by the Cat",
+}
+
+udp_response_messages = {
+    False: b"Ignored by the Cat",
+    True: b"Eaten by the Cat",
 }
 
 
@@ -288,25 +294,28 @@ class CatService:
         await connection.write(data)
         logger.debug(f"{data.decode()} -> {connection}")
 
-    async def _data_processing(
-        self, connection: AsyncTcpConnection, received_data: bytes
-    ) -> bytes:
-        result = b""
+    def _data_preprocessing(
+        self, connection, received_data: bytes, regex: str
+    ) -> list[str]:
+        incorrect_data = False
         message = received_data.decode()
         corrupted_word = connection.buffer.decode()
         names = []
-        found = [el for el in re.findall("@([^@~]+)~", message) if el]
-        words = [el for el in re.split("@([^@~]+)~", message) if el]
+        found = [el for el in re.findall(regex, message) if el]
+        words = [el for el in re.split(regex, message) if el]
 
         for word in words:
             if "@" in word or "~" in word or corrupted_word:
                 corrupted_word += word
                 if "~" not in word:
                     break
-                word = re.match("@([^@~]+)~", corrupted_word)
+                elif "~" != word[-1]:
+                    logger.warning("Incorrect data")
+                    raise ValueError("Incorrect data")
+                word = re.match(regex, corrupted_word)
                 word = word.group(1) if word else None
                 if not word:
-                    result = b"incorrect message format"
+                    incorrect_data = True
                     corrupted_word = ""
                     break
                 corrupted_word = ""
@@ -315,6 +324,20 @@ class CatService:
         logger.info(f"{names=}")
         logger.info(f"{corrupted_word=}")
         connection.buffer = corrupted_word.encode()
+        if incorrect_data:
+            raise ValueError("Incorrect data")
+        return names
+
+    async def _tcp_data_processing(
+        self, connection: AsyncTcpConnection, received_data: bytes
+    ) -> bytes:
+        result = b""
+        try:
+            names = self._data_preprocessing(
+                connection, received_data, regex="@([^@~]+)~"
+            )
+        except ValueError:
+            return b"Incorrect data"
 
         for name in names:
             result += tcp_response_messages[await self._cat.pet(name)]
@@ -324,11 +347,11 @@ class CatService:
     async def _handle_tcp_requests(self):
         logger.debug("tcp handler started")
         while True:
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.1)
             for connection in self._tcp_server.connections:
                 try:
                     data = await asyncio.wait_for(
-                        connection.read(10), timeout=0.1
+                        connection.read(100), timeout=0.1
                     )
                 except asyncio.TimeoutError:
                     continue
@@ -336,14 +359,62 @@ class CatService:
                     # logger.debug(f"{connection} closed")
                     continue
                 logger.debug(f"{connection} -> {data.decode()}")
-                response = await self._data_processing(connection, data)
+                response = await self._tcp_data_processing(connection, data)
                 try:
                     await self._tcp_response(connection, response)
                 except ConnectionError:
                     continue
 
+    async def _udp_response(self, connection: AsyncUdpConnection, data: bytes):
+        await connection.write(data)
+        logger.debug(f"{data.decode()} -> {connection}")
+
+    async def _udp_data_processing(
+        self, connection: AsyncUdpConnection, received_data: bytes
+    ) -> bytes:
+        result = b""
+        try:
+            names = self._data_preprocessing(
+                connection, received_data, regex="@([^@~]+)~"
+            )
+        except ValueError:
+            return b"Incorrect data"
+
+        tuples = [tuple(name.split(" - ")) for name in names]
+        logger.info(f"{tuples=}")
+
+        for tup in tuples:
+            result += udp_response_messages[await self._cat.feed(*tup)]
+
+        if connection.buffer:
+            print(connection.buffer)
+            result += f"The Cat is amused by #{connection.counter}".encode()
+            connection.counter += 1
+        else:
+            connection.counter = 0
+
+        return result
+
+    async def _handle_udp_requests(self):
+        logger.debug("udp handler started")
+        while True:
+            await asyncio.sleep(1)
+            for connection in self._udp_server.connections:
+                if not connection.message_buffer:
+                    continue
+                data = connection.message_buffer
+                connection.message_buffer = b""
+                # logger.debug(f"{connection} -> {data.decode()}")
+                response = await self._udp_data_processing(connection, data)
+                try:
+                    await self._udp_response(connection, response)
+                except ConnectionError:
+                    continue
+
     async def _start_handlers(self):
-        await asyncio.gather(self._handle_tcp_requests())
+        await asyncio.gather(
+            self._handle_tcp_requests(), self._handle_udp_requests()
+        )
 
     async def _start(self):
         await asyncio.gather(self._start_servers(), self._start_handlers())

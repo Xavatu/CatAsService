@@ -106,10 +106,10 @@ class AsyncUdpClient(AsyncTransportClient):
 if __name__ == "__main__":
 
     async def main():
-        client = AsyncTcpClient("127.0.0.1", 8011)
-        await client.open("127.0.0.1", 8000)
+        client = AsyncUdpClient("127.0.0.1", 8012)
+        await client.open("127.0.0.1", 8001)
         while True:
-            await client.write("123@Alex~@Sta".encode())
+            await client.write(input().encode())
             await asyncio.sleep(1)
             data = await client.read(100)
             print(f"Received: {data.decode()!r}")

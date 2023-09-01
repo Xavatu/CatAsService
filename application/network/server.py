@@ -29,6 +29,15 @@ class AsyncAbstractConnection(ABC):
         self._port = port
         self._reader = None
         self._writer = None
+        self._buffer = b""
+
+    @property
+    def buffer(self) -> bytes:
+        return self._buffer
+
+    @buffer.setter
+    def buffer(self, value: bytes):
+        self._buffer = value
 
     @abstractmethod
     async def close(self, *args, **kwargs):
@@ -66,15 +75,6 @@ class AsyncTcpConnection(AsyncAbstractConnection):
         self._reader = reader
         self._writer = writer
         self._is_opened = True
-        self._buffer = b""
-
-    @property
-    def buffer(self) -> bytes:
-        return self._buffer
-
-    @buffer.setter
-    def buffer(self, value: bytes):
-        self._buffer = value
 
     async def close(self, *args, **kwargs):
         self._writer.close()
@@ -159,6 +159,7 @@ class AsyncUdpConnection(AsyncAbstractConnection):
         super().__init__(host, port)
         self._transport = transport
         self._is_opened = True
+        self.message_buffer = b""
 
     def close(self):
         self._writer.close()
@@ -201,6 +202,7 @@ class UdpConnectionPool(asyncio.DatagramProtocol):
         else:
             connection = self._connections[addresses.index(addr)]
         logger.debug(f"{connection} -> {data.decode()}")
+        connection.message_buffer += data
 
     @property
     def connections(self):
