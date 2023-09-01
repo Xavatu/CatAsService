@@ -13,6 +13,10 @@ class CRUD:
         self._model = model
 
     @property
+    def model(self):
+        return self._model
+
+    @property
     def _select_model(self) -> Select:
         return select(self._model)
 
@@ -29,15 +33,15 @@ class _UserCRUD(CRUD):
     def __init__(self):
         super().__init__(User)
 
-    async def add_new_user(self, name: str, session: AsyncSession) -> int:
+    async def add_new_user(self, name: str, session: AsyncSession) -> User:
         query = (
             self._insert_model.values({"name": name})
-            .returning(self._model.id)
+            .returning(self._model)
             .on_conflict_do_nothing()
         )
-        id = (await session.execute(query)).scalar()
+        res = (await session.execute(query)).scalar()
         await session.commit()
-        return id
+        return res
 
     async def get_user(self, name: str, session: AsyncSession) -> User:
         query = self._select_model.where(self._model.name == name)
@@ -50,18 +54,18 @@ class _FoodCRUD(CRUD):
         super().__init__(Food)
 
     async def add_new_food(
-        self, name: str, prefered_by_the_cat, session: AsyncSession
-    ) -> int:
+        self, name: str, prefered_by_the_cat: bool, session: AsyncSession
+    ) -> Food:
         query = (
             self._insert_model.values(
                 {"name": name, "preferred_by_the_cat": prefered_by_the_cat}
             )
-            .returning(self._model.id)
+            .returning(self._model)
             .on_conflict_do_nothing()
         )
-        id = (await session.execute(query)).scalar()
+        res = (await session.execute(query)).scalar()
         await session.commit()
-        return id
+        return res
 
     async def get_food(self, name: str, session) -> Food:
         query = self._select_model.where(self._model.name == name)
