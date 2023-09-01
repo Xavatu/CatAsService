@@ -4,7 +4,11 @@ from random import randint
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from application.network.server import AsyncTcpServer, AsyncUdpServer
+from application.network.server import (
+    AsyncTcpServer,
+    AsyncUdpServer,
+    AsyncTcpConnection,
+)
 from application.utils.cruds import FoodCRUD, UserCRUD, StatCRUD
 from config.logger import logger
 from config.db import async_session_injector
@@ -274,6 +278,22 @@ class CatService:
     async def _stop_servers(self):
         await asyncio.gather(self._tcp_server.stop(), self._udp_server.stop())
 
+    async def _tcp_response(self, connection: AsyncTcpConnection, data: bytes):
+        await connection.write(data)
+        logger.debug(f"{data.decode()} -> {connection}")
+
+    async def _data_processing(
+        self, connection: AsyncTcpConnection, received_data: bytes
+    ):
+        message = received_data.decode()
+        print(type(message))
+        print(connection.buffer)
+        if connection.buffer:
+            message = connection.buffer.decode() + message
+        else:
+            connection.buffer = message.encode()
+        print(message)
+
     async def _handle_tcp_requests(self):
         logger.debug("tcp handler started")
         while True:
@@ -289,6 +309,11 @@ class CatService:
                     # logger.debug(f"{connection} closed")
                     continue
                 logger.debug(f"{connection} -> {data.decode()}")
+                response = await self._data_processing(connection, data)
+                try:
+                    await self._tcp_response(connection, data)
+                except ConnectionError:
+                    continue
 
     async def _start_handlers(self):
         await asyncio.gather(self._handle_tcp_requests())

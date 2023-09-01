@@ -66,6 +66,15 @@ class AsyncTcpConnection(AsyncAbstractConnection):
         self._reader = reader
         self._writer = writer
         self._is_opened = True
+        self._buffer = b""
+
+    @property
+    def buffer(self) -> bytes:
+        return self._buffer
+
+    @buffer.setter
+    def buffer(self, value: bytes):
+        self._buffer = value
 
     async def close(self, *args, **kwargs):
         self._writer.close()
