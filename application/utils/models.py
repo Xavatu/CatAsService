@@ -11,25 +11,25 @@ from sqlalchemy import (
 )
 
 
-_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+_id = lambda: Column(Integer, primary_key=True, index=True, autoincrement=True)
 
 
 class User(Base):
     __tablename__ = "user"
-    id = _id
+    id = _id()
     name = Column(String, unique=True, nullable=False)
 
 
 class Food(Base):
     __tablename__ = "food"
-    id = _id
+    id = _id()
     name = Column(String, unique=True, nullable=False)
     preferred_by_the_cat = Column(Boolean, nullable=False)
 
 
 class EatStat(Base):
     __tablename__ = "eat_stat"
-    id = _id
+    id = _id()
     user_id = Column(
         Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False
     )
@@ -43,7 +43,7 @@ class EatStat(Base):
 
 class PetStat(Base):
     __tablename__ = "pet_stat"
-    id = _id
+    id = _id()
     user_id = Column(
         Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False
     )
