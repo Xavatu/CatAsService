@@ -6,7 +6,7 @@ from application.network.common import to_coroutine_function, Reader, Writer
 
 
 class AsyncAbstractClient(ABC):
-    def __init__(self, host: str, port: str):
+    def __init__(self, host: str, port: int):
         self._host = host
         self._port = port
         self._sock = None
@@ -18,7 +18,7 @@ class AsyncAbstractClient(ABC):
         return self._host
 
     @property
-    def port(self) -> str:
+    def port(self) -> int:
         return self._port
 
     @abstractmethod
@@ -39,16 +39,16 @@ class AsyncAbstractClient(ABC):
 
 
 class AsyncTransportClient(AsyncAbstractClient):
-    def __init__(self, host: str, port: str, sock: socket.socket):
+    def __init__(self, host: str, port: int, sock: socket.socket):
         super().__init__(host, port)
         self._sock = sock
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._sock.bind((self._host, int(self._port)))
+        self._sock.bind((self._host, self._port))
 
     async def open(
-        self, host: str, port: str, **kwargs
+        self, host: str, port: int, **kwargs
     ) -> "AsyncTransportClient":
-        self._sock.connect((host, int(port)))
+        self._sock.connect((host, port))
         self._reader, self._writer = await asyncio.open_connection(
             sock=self._sock
         )
@@ -81,23 +81,23 @@ class AsyncTransportClient(AsyncAbstractClient):
 
 
 class AsyncTcpClient(AsyncTransportClient):
-    def __init__(self, host: str, port: str):
+    def __init__(self, host: str, port: int):
         super().__init__(
             host, port, socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         )
 
 
 class AsyncUdpClient(AsyncTransportClient):
-    def __init__(self, host: str, port: str):
+    def __init__(self, host: str, port: int):
         super().__init__(
             host, port, socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         )
 
     async def open(
-        self, host: str, port: str, **kwargs
+        self, host: str, port: int, **kwargs
     ) -> "AsyncTransportClient":
         await asyncio.sleep(0)
-        self._sock.connect((host, int(port)))
+        self._sock.connect((host, port))
         self._reader = Reader(self._sock)
         self._writer = Writer(self._sock)
         return self
@@ -106,8 +106,8 @@ class AsyncUdpClient(AsyncTransportClient):
 if __name__ == "__main__":
 
     async def main():
-        client = AsyncUdpClient("127.0.0.1", "8002")
-        await client.open("127.0.0.1", "8000")
+        client = AsyncUdpClient("127.0.0.1", 8011)
+        await client.open("127.0.0.1", 8001)
         while True:
             await client.write("Hello World!".encode())
             await asyncio.sleep(1)
