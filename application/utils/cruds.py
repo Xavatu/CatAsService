@@ -5,7 +5,7 @@ from sqlalchemy import select, and_, desc, update, Select, Update
 from sqlalchemy.dialects.postgresql import insert, Insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import User, Food, EatStat, PetStat
+from application.utils.models import User, Food, EatStat, PetStat
 
 
 class CRUD:
@@ -93,11 +93,11 @@ class StatCRUD:
             select(EatStat)
             .join(User, and_(User.id == EatStat.user_id, User.name == name))
             .where(
-                EatStat.eaten_at
+                EatStat.eat_at
                 >= datetime.datetime.utcnow()
                 - datetime.timedelta(seconds=period)
             )
-            .order_by(desc(EatStat.eaten_at))
+            .order_by(desc(EatStat.eat_at))
         )
         res = (await session.execute(query)).scalars().all()
         return res
@@ -124,7 +124,7 @@ class StatCRUD:
         period: float, session: AsyncSession
     ) -> List[EatStat]:
         query = select(EatStat).where(
-            EatStat.eaten_at
+            EatStat.eat_at
             >= datetime.datetime.utcnow() - datetime.timedelta(seconds=period)
         )
         res = (await session.execute(query)).scalars().all()

@@ -5,9 +5,9 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from application.network.server import AsyncTcpServer, AsyncUdpServer
+from application.utils.cruds import FoodCRUD, UserCRUD, StatCRUD
 from config.logger import logger
 from config.db import async_session_injector
-from utils.cruds import FoodCRUD, UserCRUD, StatCRUD
 
 
 CAT_SATIETY_PERIOD = 60
@@ -46,7 +46,7 @@ class Cat:
         weights = [
             (
                 self._satiety_period
-                - (current_time - el.eaten_at).total_seconds()
+                - (current_time - el.eat_at).total_seconds()
             )
             / self._satiety_period
             for el in results
@@ -279,5 +279,11 @@ class CatService:
 
 
 if __name__ == "__main__":
-    cat_service = CatService()
-    asyncio.run(cat_service._start())
+
+    async def main():
+        cat_service = CatService()
+        await cat_service._start()
+        await asyncio.sleep(10)
+        await cat_service._stop()
+
+    asyncio.run(main())
