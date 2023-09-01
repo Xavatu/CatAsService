@@ -22,6 +22,11 @@ host = "127.0.0.1"
 tcp_port = 8000
 udp_port = 8001
 
+tcp_response_messages = {
+    False: b"Scratched by the Cat",
+    True: b"Tolerated by the Cat",
+}
+
 
 def get_weights(n: int) -> list[float]:
     summ = sum([1 / (pow(2, i + 1)) for i in range(n)])
@@ -286,36 +291,35 @@ class CatService:
     async def _data_processing(
         self, connection: AsyncTcpConnection, received_data: bytes
     ) -> bytes:
+        result = b""
         message = received_data.decode()
         corrupted_word = connection.buffer.decode()
         names = []
         found = [el for el in re.findall("@([^@~]+)~", message) if el]
         words = [el for el in re.split("@([^@~]+)~", message) if el]
-        logger.warning(message)
-        logger.warning(found)
-        logger.warning(words)
 
         for word in words:
             if "@" in word or "~" in word or corrupted_word:
-                logger.info(f"{corrupted_word}+{word}")
                 corrupted_word += word
                 if "~" not in word:
                     break
                 word = re.match("@([^@~]+)~", corrupted_word)
                 word = word.group(1) if word else None
                 if not word:
-                    logger.critical("incorrect message format")
                     result = b"incorrect message format"
                     corrupted_word = ""
                     break
-                logger.info(word)
                 corrupted_word = ""
             names.append(word)
 
         logger.info(f"{names=}")
         logger.info(f"{corrupted_word=}")
-
         connection.buffer = corrupted_word.encode()
+
+        for name in names:
+            result += tcp_response_messages[await self._cat.pet(name)]
+
+        return result
 
     async def _handle_tcp_requests(self):
         logger.debug("tcp handler started")
@@ -324,7 +328,7 @@ class CatService:
             for connection in self._tcp_server.connections:
                 try:
                     data = await asyncio.wait_for(
-                        connection.read(1), timeout=0.1
+                        connection.read(10), timeout=0.1
                     )
                 except asyncio.TimeoutError:
                     continue
@@ -334,7 +338,7 @@ class CatService:
                 logger.debug(f"{connection} -> {data.decode()}")
                 response = await self._data_processing(connection, data)
                 try:
-                    await self._tcp_response(connection, data)
+                    await self._tcp_response(connection, response)
                 except ConnectionError:
                     continue
 
