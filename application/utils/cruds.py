@@ -101,9 +101,9 @@ class StatCRUD:
     @staticmethod
     async def get_pet_stat_by_username_and_period(
         name: str, period: float, session: AsyncSession
-    ):
+    ) -> List[PetStat]:
         query = (
-            select(PetStat.is_success)
+            select(PetStat)
             .join(User, and_(User.id == PetStat.user_id, User.name == name))
             .where(
                 PetStat.pet_at
