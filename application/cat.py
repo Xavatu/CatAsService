@@ -39,15 +39,12 @@ class Cat:
             self._satiety_period, session=session
         )
         if not results:
-            logger.debug("satiety_scale: 0.0")
+            # logger.debug("satiety_scale: 0.0")
             return 0.0
         n = len(results)
         current_time = datetime.utcnow()
         weights = [
-            (
-                self._satiety_period
-                - (current_time - el.eat_at).total_seconds()
-            )
+            (self._satiety_period - (current_time - el.eat_at).total_seconds())
             / self._satiety_period
             for el in results
         ]
@@ -57,7 +54,7 @@ class Cat:
             for i in range(n)
         ]
         scale = sum(points)
-        logger.debug(f"satiety_scale: {scale}")
+        # logger.debug(f"satiety_scale: {scale}")
         return scale
 
     @async_session_injector
@@ -66,13 +63,13 @@ class Cat:
             self._time_to_forget, session=session
         )
         if not results:
-            logger.debug("pet_scale: 0.0")
+            # logger.debug("pet_scale: 0.0")
             return 0.0
         n = len(results)
         weights = get_weights(n)
         points = [weights[i] * results[i] for i in range(n)]
         scale = sum(points)
-        logger.debug(f"pet_scale: {scale}")
+        # logger.debug(f"pet_scale: {scale}")
         return scale
 
     async def _monitoring_self_scales(self):
@@ -269,21 +266,45 @@ class CatService:
         self._tcp_server = AsyncTcpServer(host, tcp_port)
         self._udp_server = AsyncUdpServer(host, udp_port)
 
-    async def _start(self):
+    async def _start_servers(self):
         await asyncio.gather(
             self._tcp_server.start(), self._udp_server.start()
         )
 
-    async def _stop(self):
+    async def _stop_servers(self):
         await asyncio.gather(self._tcp_server.stop(), self._udp_server.stop())
+
+    async def _handle_tcp_requests(self):
+        logger.debug("tcp handler started")
+        while True:
+            await asyncio.sleep(0.1)
+            for connection in self._tcp_server.connections:
+                try:
+                    data = await asyncio.wait_for(
+                        connection.read(100), timeout=0.1
+                    )
+                except asyncio.TimeoutError:
+                    continue
+                except ConnectionError:
+                    # logger.debug(f"{connection} closed")
+                    continue
+                logger.debug(f"{connection} -> {data.decode()}")
+
+    async def _start_handlers(self):
+        await asyncio.gather(self._handle_tcp_requests())
+
+    async def _start(self):
+        await asyncio.gather(self._start_servers(), self._start_handlers())
+
+    async def _stop(self):
+        await asyncio.gather(self._stop_servers())
 
 
 if __name__ == "__main__":
 
     async def main():
         cat_service = CatService()
-        await cat_service._start()
-        await asyncio.sleep(10)
-        await cat_service._stop()
+        task = await cat_service._start()
+        # await cat_service._stop()
 
     asyncio.run(main())

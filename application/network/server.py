@@ -47,8 +47,11 @@ class AsyncAbstractConnection(ABC):
         return self._host
 
     @property
-    def port(self) -> str:
+    def port(self) -> int:
         return self._port
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self._host}:{self._port})"
 
 
 class AsyncTcpConnection(AsyncAbstractConnection):
@@ -75,10 +78,14 @@ class AsyncTcpConnection(AsyncAbstractConnection):
 
     async def read(self, n: int) -> bytes:
         try:
-            return await self._read(n)
+            res = await self._read(n)
         except ConnectionError:
             self._is_opened = False
             raise
+        if not res:
+            self._is_opened = False
+            raise ConnectionError("Connection closed")
+        return res
 
     async def _write(self, data: bytes):
         func = to_coroutine_function(self._writer.write)
@@ -108,13 +115,15 @@ class AsyncTcpServer(AsyncAbstractServer):
 
     async def _monitoring_connections(self):
         while True:
+            # logger.debug(f"connections: {self._connections}")
             await asyncio.sleep(1)
             for connection in self._connections:
                 if not connection.is_opened:
-                    logger.debug(f"connection lost {connection}")
+                    logger.debug(f"lost connection {connection}")
                     self._connections.remove(connection)
 
     async def start(self):
+        logger.debug(f"start TCP server {self._host}:{self._port}")
         self._server = await asyncio.start_server(
             self.handle_message, sock=self._sock, start_serving=True
         )
@@ -163,23 +172,26 @@ class UdpConnectionPool(asyncio.DatagramProtocol):
     async def _monitoring_connections(self):
         while True:
             await asyncio.sleep(1)
+            # logger.debug(f"connections: {self._connections}")
             for connection in self._connections:
                 if not connection.is_opened:
-                    logger.debug(f"connection lost {connection}")
+                    logger.debug(f"lost connection {connection}")
                     self._connections.remove(connection)
 
     def connection_made(self, transport):
         self.transport = transport
 
     def datagram_received(self, data, addr):
-        logger.debug(f"Received {data.decode()} from {addr}")
         addresses = [
             (connection.host, connection.port)
             for connection in self._connections
         ]
         if addr not in addresses:
-            new_connection = AsyncUdpConnection(*addr, self.transport)
-            self._connections.append(new_connection)
+            connection = AsyncUdpConnection(*addr, self.transport)
+            self._connections.append(connection)
+        else:
+            connection = self._connections[addresses.index(addr)]
+        logger.debug(f"{connection} -> {data.decode()}")
 
     @property
     def connections(self):
@@ -207,6 +219,7 @@ class AsyncUdpServer(AsyncAbstractServer):
         await self._future
 
     async def start(self):
+        logger.debug(f"start UDP server {self._host}:{self._port}")
         await self._start()
 
     async def _stop(self):
