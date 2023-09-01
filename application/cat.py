@@ -1,4 +1,5 @@
 import asyncio
+import re
 
 from random import randint
 from datetime import datetime
@@ -284,24 +285,46 @@ class CatService:
 
     async def _data_processing(
         self, connection: AsyncTcpConnection, received_data: bytes
-    ):
+    ) -> bytes:
         message = received_data.decode()
-        print(type(message))
-        print(connection.buffer)
-        if connection.buffer:
-            message = connection.buffer.decode() + message
-        else:
-            connection.buffer = message.encode()
-        print(message)
+        corrupted_word = connection.buffer.decode()
+        names = []
+        found = [el for el in re.findall("@([^@~]+)~", message) if el]
+        words = [el for el in re.split("@([^@~]+)~", message) if el]
+        logger.warning(message)
+        logger.warning(found)
+        logger.warning(words)
+
+        for word in words:
+            if "@" in word or "~" in word or corrupted_word:
+                logger.info(f"{corrupted_word}+{word}")
+                corrupted_word += word
+                if "~" not in word:
+                    break
+                word = re.match("@([^@~]+)~", corrupted_word)
+                word = word.group(1) if word else None
+                if not word:
+                    logger.critical("incorrect message format")
+                    result = b"incorrect message format"
+                    corrupted_word = ""
+                    break
+                logger.info(word)
+                corrupted_word = ""
+            names.append(word)
+
+        logger.info(f"{names=}")
+        logger.info(f"{corrupted_word=}")
+
+        connection.buffer = corrupted_word.encode()
 
     async def _handle_tcp_requests(self):
         logger.debug("tcp handler started")
         while True:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.3)
             for connection in self._tcp_server.connections:
                 try:
                     data = await asyncio.wait_for(
-                        connection.read(100), timeout=0.1
+                        connection.read(1), timeout=0.1
                     )
                 except asyncio.TimeoutError:
                     continue

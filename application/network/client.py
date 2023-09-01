@@ -109,7 +109,7 @@ if __name__ == "__main__":
         client = AsyncTcpClient("127.0.0.1", 8011)
         await client.open("127.0.0.1", 8000)
         while True:
-            await client.write("Hello World!".encode())
+            await client.write("123@Alex~@Sta".encode())
             await asyncio.sleep(1)
             data = await client.read(100)
             print(f"Received: {data.decode()!r}")
