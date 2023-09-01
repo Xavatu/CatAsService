@@ -3,10 +3,11 @@ import asyncio
 from abc import ABC, abstractmethod
 
 from application.network.common import to_coroutine_function
+from config.logger import logger
 
 
 class AsyncAbstractServer(ABC):
-    def __init__(self, host: str, port: str):
+    def __init__(self, host: str, port: int):
         self._host = host
         self._port = port
         self._sock = None
@@ -23,7 +24,7 @@ class AsyncAbstractServer(ABC):
 
 
 class AsyncAbstractConnection(ABC):
-    def __init__(self, host: str, port: str):
+    def __init__(self, host: str, port: int):
         self._host = host
         self._port = port
         self._reader = None
@@ -54,7 +55,7 @@ class AsyncTcpConnection(AsyncAbstractConnection):
     def __init__(
         self,
         host: str,
-        port: str,
+        port: int,
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
     ):
@@ -96,11 +97,11 @@ class AsyncTcpConnection(AsyncAbstractConnection):
 
 
 class AsyncTcpServer(AsyncAbstractServer):
-    def __init__(self, host: str, port: str):
+    def __init__(self, host: str, port: int):
         super().__init__(host, port)
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._sock.bind((self._host, int(self._port)))
+        self._sock.bind((self._host, self._port))
         self._connections: list[AsyncTcpConnection] = []
 
         asyncio.create_task(self._monitoring_connections())
@@ -110,7 +111,7 @@ class AsyncTcpServer(AsyncAbstractServer):
             await asyncio.sleep(1)
             for connection in self._connections:
                 if not connection.is_opened:
-                    print(f"connection lost {connection}")
+                    logger.debug(f"connection lost {connection}")
                     self._connections.remove(connection)
 
     async def start(self):
@@ -136,7 +137,7 @@ class AsyncTcpServer(AsyncAbstractServer):
 
 
 class AsyncUdpConnection(AsyncAbstractConnection):
-    def __init__(self, host: str, port: str, transport):
+    def __init__(self, host: str, port: int, transport):
         super().__init__(host, port)
         self._transport = transport
         self._is_opened = True
@@ -147,7 +148,7 @@ class AsyncUdpConnection(AsyncAbstractConnection):
 
     async def write(self, data: bytes):
         await asyncio.sleep(0)
-        self._transport.sendto(data, (self._host, int(self._port)))
+        self._transport.sendto(data, (self._host, self._port))
 
     async def is_opened(self):
         return self._is_opened
@@ -164,14 +165,14 @@ class UdpConnectionPool(asyncio.DatagramProtocol):
             await asyncio.sleep(1)
             for connection in self._connections:
                 if not connection.is_opened:
-                    print(f"connection lost {connection}")
+                    logger.debug(f"connection lost {connection}")
                     self._connections.remove(connection)
 
     def connection_made(self, transport):
         self.transport = transport
 
     def datagram_received(self, data, addr):
-        print(f"Received {data.decode()} from {addr}")
+        logger.debug(f"Received {data.decode()} from {addr}")
         addresses = [
             (connection.host, connection.port)
             for connection in self._connections
@@ -186,11 +187,11 @@ class UdpConnectionPool(asyncio.DatagramProtocol):
 
 
 class AsyncUdpServer(AsyncAbstractServer):
-    def __init__(self, host: str, port: str):
+    def __init__(self, host: str, port: int):
         super().__init__(host, port)
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._sock.bind((self._host, int(self._port)))
+        self._sock.bind((self._host, self._port))
         self._future = None
         self._transport = None
         self._protocol = None
@@ -225,13 +226,13 @@ if __name__ == "__main__":
     async def serving(server):
         for i in range(10):
             await asyncio.sleep(1)
-            print(server.connections)
+            logger.debug(server.connections)
             for connection in server.connections:
                 await connection.write(f"message {i}".encode())
         await server.stop()
 
     async def main():
-        server = AsyncUdpServer("127.0.0.1", "8000")
+        server = AsyncUdpServer("127.0.0.1", 8000)
         await asyncio.gather(server.start(), serving(server))
 
     asyncio.run(main())
