@@ -1,4 +1,5 @@
 import os
+from functools import wraps
 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.asyncio import (
@@ -24,6 +25,10 @@ async_session = async_sessionmaker(
 )
 
 
-async def get_session():
-    async with async_session() as session:
-        yield session
+def async_session_injector(func):
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        async with async_session() as session:
+            return await func(*args, **kwargs, session=session)
+
+    return wrapper
