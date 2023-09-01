@@ -37,6 +37,7 @@ class EatStat(Base):
         Integer, ForeignKey("food.id", ondelete="CASCADE"), nullable=False
     )
     is_success = Column(Boolean, nullable=False)
+    is_cat_was_fed = Column(Boolean, nullable=False)
     eat_at = Column(DateTime, default=func.now())
 
 
