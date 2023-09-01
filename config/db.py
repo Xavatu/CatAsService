@@ -28,6 +28,8 @@ async_session = async_sessionmaker(
 def async_session_injector(func):
     @wraps(func)
     async def wrapper(*args, **kwargs):
+        if "session" in kwargs:
+            return await func(*args, **kwargs)
         async with async_session() as session:
             return await func(*args, **kwargs, session=session)
 
