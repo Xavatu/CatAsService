@@ -45,9 +45,14 @@ class Cat:
         self._satiety_period = CAT_SATIETY_PERIOD
         self._time_to_forget = CAT_TIME_TO_FORGET
         self._satiety_scale = 0.0
-        self._pet_scale = 0.0
+        self._pet_scale = 1.0
+        self._started = False
 
         asyncio.create_task(self._monitoring_self_scales())
+
+    @property
+    def started(self):
+        return self._started
 
     @async_session_injector
     async def _get_satiety_scale(self, session: AsyncSession) -> float:
@@ -216,6 +221,7 @@ class Cat:
     async def feed(
         self, username: str, foodname: str, session: AsyncSession
     ) -> bool:
+        self._started = True
         if not (
             user := await self._does_the_cat_know_the_human(
                 username, session=session
@@ -260,6 +266,7 @@ class Cat:
 
     @async_session_injector
     async def pet(self, name: str, session: AsyncSession) -> bool:
+        self._started = True
         if not (
             user := await self._does_the_cat_know_the_human(
                 name, session=session
@@ -342,6 +349,9 @@ class CatService:
         for name in names:
             result += tcp_response_messages[await self._cat.pet(name)]
 
+        if self._cat.happiness_scale < 0.2:
+            await connection.close()
+
         return result
 
     async def _handle_tcp_requests(self):
@@ -380,11 +390,26 @@ class CatService:
         except ValueError:
             return b"Incorrect data"
 
-        tuples = [tuple(name.split(" - ")) for name in names]
-        logger.info(f"{tuples=}")
+        lists = [list(name.split(" - ")) for name in names]
+        logger.info(f"{lists=}")
 
-        for tup in tuples:
-            result += udp_response_messages[await self._cat.feed(*tup)]
+        for lst in lists:
+            logger.warning(lst)
+            try:
+                name = lst[0]
+            except IndexError:
+                logger.warning("Incorrect data")
+                result += b"Incorrect data"
+                continue
+            try:
+                foodname = lst[1]
+            except IndexError:
+                logger.warning("Incorrect data")
+                result += b"Incorrect data"
+                continue
+            result += udp_response_messages[
+                await self._cat.feed(name, foodname)
+            ]
 
         if connection.buffer:
             print(connection.buffer)
@@ -416,10 +441,11 @@ class CatService:
             self._handle_tcp_requests(), self._handle_udp_requests()
         )
 
-    async def _start(self):
+    async def start(self):
         await asyncio.gather(self._start_servers(), self._start_handlers())
 
-    async def _stop(self):
+    async def stop(self):
+        logger.info("Stop CatService")
         await asyncio.gather(self._stop_servers())
 
 
@@ -427,7 +453,8 @@ if __name__ == "__main__":
 
     async def main():
         cat_service = CatService()
-        task = await cat_service._start()
+        await cat_service.start()
+        logger.info("CatService was stopped")
         # await cat_service._stop()
 
     asyncio.run(main())

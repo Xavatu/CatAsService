@@ -136,7 +136,7 @@ class AsyncTcpServer(AsyncAbstractServer):
         self._server = await asyncio.start_server(
             self.handle_message, sock=self._sock, start_serving=True
         )
-        return await self._server.serve_forever()
+        return await self._server.start_serving()
 
     async def stop(self):
         self._server.close()
@@ -159,6 +159,7 @@ class AsyncUdpConnection(AsyncAbstractConnection):
         super().__init__(host, port)
         self._transport = transport
         self._is_opened = True
+        self.counter = 0
         self.message_buffer = b""
 
     def close(self):
@@ -235,7 +236,7 @@ class AsyncUdpServer(AsyncAbstractServer):
 
     async def _stop(self):
         await asyncio.sleep(0)
-        self._future.set_result(True)
+        self._future.done()
 
     async def stop(self):
         await self._stop()
